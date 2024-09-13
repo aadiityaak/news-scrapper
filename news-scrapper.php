@@ -26,9 +26,7 @@ if (!defined('WPINC')) {
 include_once(ABSPATH . WPINC . '/feed.php');
 
 // Fungsi untuk mengambil artikel dari RSS Feed
-function fetch_liputan6_articles($category, $count) {
-    $feed_url = 'https://feed.liputan6.com/rss/news';
-    
+function fetch_liputan6_articles($feed_url, $category, $count) {
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $feed_url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -57,9 +55,7 @@ function fetch_liputan6_articles($category, $count) {
         $link = (string) $item->link;
         $content = (string) fetch_full_article($item->link);
         $thumbnail = (string) $item->enclosure['url'] ?? '';
-
-        echo '<p>'.$title.'</p>';
-        save_liputan6_post($title, $content, $link, $thumbnail);
+        save_liputan6_post($title, $content, $link, $thumbnail, $category);
     }
 }
 function fetch_full_article($article_url) {
@@ -100,7 +96,7 @@ function fetch_full_article($article_url) {
     }
 }
 // Fungsi untuk menyimpan artikel sebagai post di WordPress
-function save_liputan6_post($title, $content, $link, $thumbnail) {
+function save_liputan6_post($title, $content, $link, $thumbnail, $category) {
     $post_data = array(
         'post_title'    => wp_strip_all_tags($title),
         'post_content'  => $content,
@@ -114,7 +110,10 @@ function save_liputan6_post($title, $content, $link, $thumbnail) {
 
     // Insert post ke dalam WordPress
     $post_id = wp_insert_post($post_data);
-
+    // set category
+    if($category){
+        wp_set_post_terms($post_id, $category, 'category');
+    }
     // Jika ada thumbnail, set sebagai featured image
     if (!empty($thumbnail)) {
         set_featured_image_from_url($post_id, $thumbnail);
@@ -154,18 +153,45 @@ add_action('admin_menu', 'liputan6_admin_menu');
 // Halaman admin untuk fetch artikel
 function liputan6_admin_page() {
     if (isset($_POST['category']) && isset($_POST['count'])) {
+        $url = sanitize_text_field($_POST['url']);
         $category = sanitize_text_field($_POST['category']);
         $count = intval($_POST['count']);
-        fetch_liputan6_articles($category, $count);
+        fetch_liputan6_articles($url, $category, $count);
         echo "<div class='updated'><p>Artikel berhasil diambil!</p></div>";
     }
+    $target = [
+        'https://feed.liputan6.com/rss/saham' => 'Saham',
+        'https://feed.liputan6.com/rss/news/politik' => 'Politik',
+        'https://feed.liputan6.com/rss/bisnis' => 'Bisnis',
+        'https://feed.liputan6.com/rss/bola' => 'Bola',
+        'https://feed.liputan6.com/rss/tekno' => 'Teknologi',
+        'https://feed.liputan6.com/rss/islami' => 'Islami',
+        'https://feed.liputan6.com/rss/opini' => 'Opini',
+        'https://feed.liputan6.com/rss/otomotif' => 'Otomotif',
+        'https://feed.liputan6.com/rss/global' => 'Global',
+        'https://feed.liputan6.com/rss/hot' => 'Hot',
+        'https://feed.liputan6.com/rss/crypto' => 'Crypto',
+        'https://feed.liputan6.com/rss/regional' => 'Regional',
+        'https://feed.liputan6.com/rss/lifestyle' => 'Lifestyle',
+        'https://feed.liputan6.com/rss/health' => 'Health',
+        'https://feed.liputan6.com/rss/sindikasi' => 'Sindikasi',
+        'https://feed.liputan6.com/rss/fashion-beauty' => 'Fashion & Beauty',
+        'https://feed.liputan6.com/rss/showbiz' => 'Showbiz'
+    ];
 
     echo '<div class="wrap">';
     echo '<h1>Ambil Artikel dari Liputan6</h1>';
     echo '<form method="post">';
-    
+    echo '<table class="form-table">';
     // Dropdown kategori WordPress
-    echo '<label for="category">Kategori:</label>';
+    echo '<tr><td><label for="target">Pilih Target:</label></td>';
+    echo '<td><select id="target" name="category">';
+    foreach ($target as $key => $value) {
+        echo "<option value='" . $key . "'>" . $value . "</option>";
+    }
+    echo '</select></td></tr>';
+    echo '<tr><td><label for="category">Kategori Target:</label></td>';
+    echo '<td>';
     wp_dropdown_categories(array(
         'show_option_all' => 'Pilih Kategori', 
         'name' => 'category',
@@ -173,13 +199,19 @@ function liputan6_admin_page() {
         'class' => 'postform',
         'hide_empty' => 0,
     ));
+    echo '</td></tr>';
     
     // Input untuk jumlah artikel
+    echo '<tr><td>';
     echo '<label for="count">Jumlah Artikel:</label>';
+    echo '</td>';
+    echo '<td>';
     echo '<input type="number" id="count" name="count" value="5">';
-
-    echo '<input type="submit" value="Ambil Artikel">';
+    echo '</td></tr>';
+    echo '<tr><td colspan="2">';
+    echo '<input class="button button-primary" type="submit" value="Ambil Artikel">';
+    echo '</td></tr>';
+    echo '</table>';
     echo '</form>';
     echo '</div>';
 }
-?>
