@@ -26,7 +26,7 @@ if (!defined('WPINC')) {
 include_once(ABSPATH . WPINC . '/feed.php');
 
 // Fungsi untuk mengambil artikel dari RSS Feed
-function fetch_liputan6_articles($feed_url, $category, $count) {
+function fetch_liputan6_articles($feed_url, $category, $count, $status) {
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $feed_url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -55,7 +55,7 @@ function fetch_liputan6_articles($feed_url, $category, $count) {
         $link = (string) $item->link;
         $content = (string) fetch_full_article($item->link);
         $thumbnail = (string) $item->enclosure['url'] ?? '';
-        save_liputan6_post($title, $content, $link, $thumbnail, $category);
+        save_liputan6_post($title, $content, $link, $thumbnail, $category, $status);
     }
 }
 function fetch_full_article($article_url) {
@@ -87,7 +87,28 @@ function fetch_full_article($article_url) {
         }
 
         // Membersihkan HTML
-        $cleaned_content = strip_tags($article_content, '<p><a><strong><em><ul><li><blockquote>'); // Biarkan tag tertentu
+        $cleaned_dom = new DOMDocument();
+        @$cleaned_dom->loadHTML($article_content);
+        
+        // Hapus semua elemen div
+        $divs = $cleaned_dom->getElementsByTagName('div');
+        while ($divs->length > 0) {
+            $div = $divs->item(0);
+            $div->parentNode->removeChild($div);
+        }
+
+        // Hapus semua elemen link (a)
+        $links = $cleaned_dom->getElementsByTagName('a');
+        while ($links->length > 0) {
+            $link = $links->item(0);
+            $link->parentNode->removeChild($link);
+        }
+
+        // Mengambil konten HTML yang telah dibersihkan
+        $cleaned_content = $cleaned_dom->saveHTML();
+        
+        // Menghapus tag HTML yang tidak diinginkan, hanya biarkan yang tertentu
+        $cleaned_content = strip_tags($cleaned_content, '<p><strong><em><ul><li><blockquote>'); // Biarkan tag tertentu
 
         return $cleaned_content;
     } else {
@@ -96,11 +117,11 @@ function fetch_full_article($article_url) {
     }
 }
 // Fungsi untuk menyimpan artikel sebagai post di WordPress
-function save_liputan6_post($title, $content, $link, $thumbnail, $category) {
+function save_liputan6_post($title, $content, $link, $thumbnail, $category, $status) {
     $post_data = array(
         'post_title'    => wp_strip_all_tags($title),
         'post_content'  => $content,
-        'post_status'   => 'draft',
+        'post_status'   => $status,
         'post_type'     => 'post',
         'meta_input'    => array(
             'source_link' => esc_url($link),
@@ -153,10 +174,11 @@ add_action('admin_menu', 'liputan6_admin_menu');
 // Halaman admin untuk fetch artikel
 function liputan6_admin_page() {
     if (isset($_POST['category']) && isset($_POST['count'])) {
-        $url = sanitize_text_field($_POST['url']);
+        $target = sanitize_text_field($_POST['target']);
         $category = sanitize_text_field($_POST['category']);
         $count = intval($_POST['count']);
-        fetch_liputan6_articles($url, $category, $count);
+        $status = sanitize_text_field($_POST['status']);
+        fetch_liputan6_articles($target, $category, $count, $status);
         echo "<div class='updated'><p>Artikel berhasil diambil!</p></div>";
     }
     $target = [
@@ -185,7 +207,7 @@ function liputan6_admin_page() {
     echo '<table class="form-table">';
     // Dropdown kategori WordPress
     echo '<tr><td><label for="target">Pilih Target:</label></td>';
-    echo '<td><select id="target" name="category">';
+    echo '<td><select id="target" name="target">';
     foreach ($target as $key => $value) {
         echo "<option value='" . $key . "'>" . $value . "</option>";
     }
@@ -207,6 +229,16 @@ function liputan6_admin_page() {
     echo '</td>';
     echo '<td>';
     echo '<input type="number" id="count" name="count" value="5">';
+    echo '</td></tr>';
+    // pilih status
+    echo '<tr><td>';
+    echo '<label for="status">Status:</label>';
+    echo '</td>';
+    echo '<td>';
+    echo '<select id="status" name="status">';
+    echo '<option value="draft">Draft</option>';
+    echo '<option value="publish">Publish</option>';
+    echo '</select>';
     echo '</td></tr>';
     echo '<tr><td colspan="2">';
     echo '<input class="button button-primary" type="submit" value="Ambil Artikel">';
