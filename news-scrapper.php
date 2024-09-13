@@ -81,33 +81,25 @@ function fetch_full_article($article_url) {
     $content_nodes = $xpath->query('//div[contains(@class, "article-content-body__item-content")]');
 
     if ($content_nodes->length > 0) {
-        $article_content = '';
+        $cleaned_content = '';
+
         foreach ($content_nodes as $node) {
-            $article_content .= $dom->saveHTML($node);
+            // Buat elemen baru untuk menampung konten bersih
+            $temp_dom = new DOMDocument();
+            @$temp_dom->loadHTML($dom->saveHTML($node));
+
+            // Hapus semua elemen link (a) dari konten
+            $links = $temp_dom->getElementsByTagName('a');
+            while ($links->length > 0) {
+                $link = $links->item(0);
+                $link->parentNode->removeChild($link);
+            }
+
+            // Ambil konten bersih tanpa link
+            $cleaned_content .= $temp_dom->saveHTML();
         }
 
-        // Membersihkan HTML
-        $cleaned_dom = new DOMDocument();
-        @$cleaned_dom->loadHTML($article_content);
-        
-        // Hapus semua elemen div
-        $divs = $cleaned_dom->getElementsByTagName('div');
-        while ($divs->length > 0) {
-            $div = $divs->item(0);
-            $div->parentNode->removeChild($div);
-        }
-
-        // Hapus semua elemen link (a)
-        $links = $cleaned_dom->getElementsByTagName('a');
-        while ($links->length > 0) {
-            $link = $links->item(0);
-            $link->parentNode->removeChild($link);
-        }
-
-        // Mengambil konten HTML yang telah dibersihkan
-        $cleaned_content = $cleaned_dom->saveHTML();
-        
-        // Menghapus tag HTML yang tidak diinginkan, hanya biarkan yang tertentu
+        // Hapus tag HTML yang tidak diinginkan, hanya biarkan yang tertentu
         $cleaned_content = strip_tags($cleaned_content, '<p><strong><em><ul><li><blockquote>'); // Biarkan tag tertentu
 
         return $cleaned_content;
